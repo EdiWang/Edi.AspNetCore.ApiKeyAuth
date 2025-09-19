@@ -1,10 +1,26 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFramework>net8.0</TargetFramework>
+		<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<Authors>Edi Wang</Authors>
+		<Company>edi.wang</Company>
+		<PackageTags>APIKey</PackageTags>
+		<PackageProjectUrl>https://edi.wang</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/EdiWang/Edi.AspNetCore.Jwt</RepositoryUrl>
+		<Version>1.0.0</Version>
+		<Description>Basic API Key authentication library for my own</Description>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageIcon>edi-logo-blue.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
+		<None Include="..\..\img\edi-logo-blue.png" Pack="true" PackagePath="\" />
 	</ItemGroup>
 </Project>
