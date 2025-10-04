@@ -25,7 +25,7 @@ public class ApiKeyAuthenticationHandler(
         {
             var apiKey = GetApiKeyFromRequest();
 
-            if (string.IsNullOrEmpty(apiKey))
+            if (string.IsNullOrWhiteSpace(apiKey))
             {
                 Logger.LogDebug("API Key not found in request");
                 return AuthenticateResult.Fail("API Key not found");
