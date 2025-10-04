@@ -1,82 +1,85 @@
-using Microsoft.Extensions.Caching.Memory;
-using System.Collections.Concurrent;
+using System.Threading.RateLimiting;
 
 namespace Edi.AspNetCore.ApiKeyAuth.Services;
 
-public class MemoryRateLimitService : IRateLimitService
+public class MemoryRateLimitService : IRateLimitService, IDisposable
 {
-    private readonly IMemoryCache _cache;
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _semaphores = new();
+    private readonly PartitionedRateLimiter<string> _minuteLimiter;
+    private readonly PartitionedRateLimiter<string> _hourLimiter;
+    private readonly PartitionedRateLimiter<string> _dayLimiter;
 
-    public MemoryRateLimitService(IMemoryCache cache)
+    public MemoryRateLimitService()
     {
-        _cache = cache;
+        _minuteLimiter = PartitionedRateLimiter.Create<string, string>(
+            resource => RateLimitPartition.GetFixedWindowLimiter(
+                resource,
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 60,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                }));
+
+        _hourLimiter = PartitionedRateLimiter.Create<string, string>(
+            resource => RateLimitPartition.GetFixedWindowLimiter(
+                resource,
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 1000,
+                    Window = TimeSpan.FromHours(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                }));
+
+        _dayLimiter = PartitionedRateLimiter.Create<string, string>(
+            resource => RateLimitPartition.GetFixedWindowLimiter(
+                resource,
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10000,
+                    Window = TimeSpan.FromDays(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                }));
     }
 
     public async Task<bool> IsRateLimitExceededAsync(string identifier, CancellationToken cancellationToken = default)
     {
-        var semaphore = _semaphores.GetOrAdd(identifier, _ => new SemaphoreSlim(1, 1));
-        await semaphore.WaitAsync(cancellationToken);
-
-        try
+        // Check all rate limits
+        var minuteResult = await _minuteLimiter.AcquireAsync(identifier, 1, cancellationToken);
+        if (!minuteResult.IsAcquired)
         {
-            var now = DateTime.UtcNow;
-            var minuteKey = $"rate_limit_minute_{identifier}_{now:yyyyMMddHHmm}";
-            var hourKey = $"rate_limit_hour_{identifier}_{now:yyyyMMddHH}";
-            var dayKey = $"rate_limit_day_{identifier}_{now:yyyyMMdd}";
-
-            var minuteCount = _cache.GetOrCreate(minuteKey, entry =>
-            {
-                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1);
-                return 0;
-            });
-
-            var hourCount = _cache.GetOrCreate(hourKey, entry =>
-            {
-                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
-                return 0;
-            });
-
-            var dayCount = _cache.GetOrCreate(dayKey, entry =>
-            {
-                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(1);
-                return 0;
-            });
-
-            // For simplicity, using default limits. In production, these should come from configuration
-            return minuteCount >= 60 || hourCount >= 1000 || dayCount >= 10000;
+            minuteResult.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter);
+            return true;
         }
-        finally
+
+        var hourResult = await _hourLimiter.AcquireAsync(identifier, 1, cancellationToken);
+        if (!hourResult.IsAcquired)
         {
-            semaphore.Release();
+            return true;
         }
+
+        var dayResult = await _dayLimiter.AcquireAsync(identifier, 1, cancellationToken);
+        if (!dayResult.IsAcquired)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     public async Task IncrementUsageAsync(string identifier, CancellationToken cancellationToken = default)
     {
-        var semaphore = _semaphores.GetOrAdd(identifier, _ => new SemaphoreSlim(1, 1));
-        await semaphore.WaitAsync(cancellationToken);
-
-        try
-        {
-            var now = DateTime.UtcNow;
-            var minuteKey = $"rate_limit_minute_{identifier}_{now:yyyyMMddHHmm}";
-            var hourKey = $"rate_limit_hour_{identifier}_{now:yyyyMMddHH}";
-            var dayKey = $"rate_limit_day_{identifier}_{now:yyyyMMdd}";
-
-            IncrementCacheValue(minuteKey, TimeSpan.FromMinutes(1));
-            IncrementCacheValue(hourKey, TimeSpan.FromHours(1));
-            IncrementCacheValue(dayKey, TimeSpan.FromDays(1));
-        }
-        finally
-        {
-            semaphore.Release();
-        }
+        // The usage is already incremented in IsRateLimitExceededAsync when permits are acquired
+        // This method can be simplified or used for additional tracking if needed
+        await Task.CompletedTask;
     }
 
-    private void IncrementCacheValue(string key, TimeSpan expiration)
+    public void Dispose()
     {
-        var currentValue = _cache.Get<int>(key);
-        _cache.Set(key, currentValue + 1, expiration);
+        _minuteLimiter?.Dispose();
+        _hourLimiter?.Dispose();
+        _dayLimiter?.Dispose();
     }
 }
