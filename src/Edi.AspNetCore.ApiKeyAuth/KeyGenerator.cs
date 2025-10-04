@@ -5,6 +5,13 @@ namespace Edi.AspNetCore.ApiKeyAuth;
 
 public static class KeyGenerator
 {
+    public static KeyPair CreateKeyPair()
+    {
+        var api = GenerateApiKey();
+        var hashedApiKey = HashApiKey(api);
+        return new KeyPair(api, hashedApiKey);
+    }
+
     public static string GenerateApiKey()
     {
         var guid = Guid.NewGuid().ToString("N");
@@ -27,4 +34,10 @@ public static class KeyGenerator
 
         return Convert.ToBase64String(salt.Concat(hash).ToArray());
     }
+}
+
+public class KeyPair(string apiKey, string hashedApiKey)
+{
+    public string ApiKey { get; set; } = apiKey;
+    public string HashedApiKey { get; set; } = hashedApiKey;
 }
