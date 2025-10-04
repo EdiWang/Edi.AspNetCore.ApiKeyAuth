@@ -53,16 +53,22 @@ Add your API keys to `appsettings.json`:
   "ApiKeys": [
     {
       "Identifier": "MyApp",
-      "HashedKey": "generated-hash",
+      "Key": "your-plain-text-key", // Legacy support
+      "HashedKey": "base64-encoded-hashed-key", // Preferred
       "Roles": ["Admin", "User"],
-      "Scopes": ["read", "write"],
-      "IsActive": true,
-      "Description": "Primary application key",
+      "Scopes": ["read", "write", "delete"],
       "ExpiresAt": "2025-12-31T23:59:59Z",
+      "IsActive": true,
+      "Description": "Primary application API key",
       "RateLimit": {
-        "RequestsPerMinute": 60,
-        "RequestsPerHour": 1000,
-        "RequestsPerDay": 10000
+        "RequestsPerMinute": 100,
+        "RequestsPerHour": 5000,
+        "RequestsPerDay": 50000
+      },
+      "IpWhitelist": {
+        "Enabled": true,
+        "AllowedIpAddresses": ["192.168.1.100"],
+        "AllowedCidrRanges": ["10.0.0.0/8", "192.168.0.0/16"]
       }
     }
   ]
