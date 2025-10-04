@@ -10,6 +10,24 @@ A simple and flexible API Key authentication library for ASP.NET Core applicatio
 - 📊 Built-in logging support
 - 🎯 Multiple .NET versions support (.NET 8.0 and .NET 9.0)
 
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API
+    participant Handler
+    participant Validator
+    participant Config
+
+    Client->>API: HTTP Request with Raw API Key
+    API->>Handler: Extract raw key from request
+    Handler->>Validator: ValidateApiKeyAsync(rawKey)
+    Validator->>Config: Get stored hashed keys
+    Validator->>Validator: Hash raw key and compare
+    Validator->>Handler: Return validation result
+    Handler->>API: Authentication success/failure
+    API->>Client: Response
+```
+
 ## Installation
 
 Install the package via NuGet:
@@ -35,11 +53,17 @@ Add your API keys to `appsettings.json`:
   "ApiKeys": [
     {
       "Identifier": "MyApp",
-      "Key": "your-secret-api-key-here"
-    },
-    {
-      "Identifier": "AnotherClient", 
-      "Key": "another-secret-key"
+      "HashedKey": "generated-hash",
+      "Roles": ["Admin", "User"],
+      "Scopes": ["read", "write"],
+      "IsActive": true,
+      "Description": "Primary application key",
+      "ExpiresAt": "2025-12-31T23:59:59Z",
+      "RateLimit": {
+        "RequestsPerMinute": 60,
+        "RequestsPerHour": 1000,
+        "RequestsPerDay": 10000
+      }
     }
   ]
 }
@@ -55,7 +79,12 @@ using Edi.AspNetCore.ApiKeyAuth;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add API Key authentication
-builder.Services.AddApiKeyAuthentication();
+builder.Services.AddApiKeyAuthentication(options =>
+{
+    options.AllowQueryStringAuth = false; // Disable for security
+    options.EnableDetailedLogging = builder.Environment.IsDevelopment();
+    options.EnableCaching = true;
+});
 
 var app = builder.Build();
 
@@ -77,50 +106,27 @@ Use the `[Authorize]` attribute on controllers or actions:
 public class SecureController : ControllerBase
 {
     [HttpGet]
-    public IActionResult Get()
+    public IActionResult GetData()
     {
+        // Access enhanced claims
         var userIdentifier = User.FindFirst("UserIdentifier")?.Value;
-        return Ok($"Hello {userIdentifier}!");
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
+        var scopes = User.FindAll("scope").Select(c => c.Value).ToArray();
+        
+        return Ok(new 
+        { 
+            User = userIdentifier,
+            Roles = roles,
+            Scopes = scopes,
+            Message = "Hello from secure endpoint!"
+        });
     }
-}
-```
 
-## Usage
-
-### Authentication Methods
-
-The library supports API key authentication through multiple methods:
-
-#### 1. Header Authentication
-
-```bash
-curl -H "X-API-Key: your-secret-api-key-here" https://yourapi.com/api/secure
-```
-
-Alternative header name:
-```bash
-curl -H "ApiKey: your-secret-api-key-here" https://yourapi.com/api/secure
-```
-
-#### 2. Query Parameter Authentication
-
-```bash
-curl "https://yourapi.com/api/secure?apikey=your-secret-api-key-here"
-```
-
-### Accessing User Information
-
-Once authenticated, you can access user information through claims:
-
-```csharp
-[HttpGet]
-[Authorize(AuthenticationSchemes = "ApiKey")]
-public IActionResult GetUserInfo()
-{
-    var userIdentifier = User.FindFirst("UserIdentifier")?.Value;
-    var apiKey = User.FindFirst("ApiKey")?.Value;
-    var userName = User.Identity?.Name;
-    
-    return Ok(new { UserIdentifier = userIdentifier, UserName = userName });
+    [HttpPost]
+    [Authorize(Roles = "Admin")] // Role-based authorization
+    public IActionResult AdminOnly()
+    {
+        return Ok("Admin access granted");
+    }
 }
 ```
