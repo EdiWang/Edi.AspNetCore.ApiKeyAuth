@@ -135,7 +135,7 @@ public class ApiKeyAuthenticationHandler(
         return Request.HttpContext.Connection.RemoteIpAddress?.ToString();
     }
 
-    private static List<Claim> CreateClaims(Services.ApiKeyValidationResult validationResult, string apiKey)
+    private static List<Claim> CreateClaims(ApiKeyValidationResult validationResult, string apiKey)
     {
         var claims = new List<Claim>
         {

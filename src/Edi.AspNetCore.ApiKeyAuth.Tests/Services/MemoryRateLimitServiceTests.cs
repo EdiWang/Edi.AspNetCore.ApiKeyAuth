@@ -79,7 +79,7 @@ public class MemoryRateLimitServiceTests : IDisposable
         cts.Cancel();
 
         // Act & Assert
-        await Assert.ThrowsAsync<TaskCanceledException>(() => 
+        await Assert.ThrowsAsync<TaskCanceledException>(() =>
             _service.IsRateLimitExceededAsync(identifier, cts.Token));
     }
 
@@ -189,7 +189,7 @@ public class MemoryRateLimitServiceTests : IDisposable
         service.Dispose();
 
         // Act & Assert
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => 
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
             service.IsRateLimitExceededAsync("test"));
     }
 
