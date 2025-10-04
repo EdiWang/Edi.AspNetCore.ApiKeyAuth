@@ -1,11 +1,9 @@
 using Edi.AspNetCore.ApiKeyAuth.Models;
 using Edi.AspNetCore.ApiKeyAuth.Security;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Caching.Memory;
 using System.Net;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Edi.AspNetCore.ApiKeyAuth.Services;
 
@@ -46,11 +44,11 @@ public class ApiKeyValidationService : IApiKeyValidationService
         }
 
         var apiKeys = _configuration.GetSection("ApiKeys").Get<List<ApiKeyConfig>>() ?? [];
-        
+
         foreach (var config in apiKeys)
         {
             bool isMatch = false;
-            
+
             // Support both plain text (legacy) and hashed keys
             if (!string.IsNullOrEmpty(config.HashedKey))
             {
@@ -115,15 +113,6 @@ public class ApiKeyValidationService : IApiKeyValidationService
     public async Task<bool> IsRateLimitExceededAsync(string identifier, CancellationToken cancellationToken = default)
     {
         return await _rateLimitService.IsRateLimitExceededAsync(identifier, cancellationToken);
-    }
-
-    public async Task UpdateLastUsedAsync(string identifier, CancellationToken cancellationToken = default)
-    {
-        // In a real implementation, this would update a database
-        // For now, we'll use memory cache
-        var cacheKey = $"last_used_{identifier}";
-        _cache.Set(cacheKey, DateTime.UtcNow, TimeSpan.FromHours(24));
-        await Task.CompletedTask;
     }
 
     private static bool IsIpWhitelisted(string ipAddress, IpWhitelistConfig whitelist)

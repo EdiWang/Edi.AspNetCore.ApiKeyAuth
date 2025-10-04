@@ -6,7 +6,6 @@ public interface IApiKeyValidationService
 {
     Task<ApiKeyValidationResult> ValidateApiKeyAsync(string apiKey, string ipAddress = null, CancellationToken cancellationToken = default);
     Task<bool> IsRateLimitExceededAsync(string identifier, CancellationToken cancellationToken = default);
-    Task UpdateLastUsedAsync(string identifier, CancellationToken cancellationToken = default);
 }
 
 public class ApiKeyValidationResult

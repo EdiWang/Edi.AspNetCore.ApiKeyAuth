@@ -1,7 +1,6 @@
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.Extensions.DependencyInjection;
 using Edi.AspNetCore.ApiKeyAuth.Security;
 using Edi.AspNetCore.ApiKeyAuth.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Edi.AspNetCore.ApiKeyAuth;
 

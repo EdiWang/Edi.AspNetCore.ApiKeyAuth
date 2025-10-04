@@ -1,10 +1,10 @@
+using Edi.AspNetCore.ApiKeyAuth.Services;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
-using Edi.AspNetCore.ApiKeyAuth.Services;
-using Microsoft.AspNetCore.Http;
 
 namespace Edi.AspNetCore.ApiKeyAuth;
 
@@ -36,7 +36,7 @@ public class ApiKeyAuthenticationHandler(
 
             if (!validationResult.IsValid)
             {
-                Logger.LogWarning("API Key validation failed: {Reason} for IP: {ClientIp}", 
+                Logger.LogWarning("API Key validation failed: {Reason} for IP: {ClientIp}",
                     validationResult.FailureReason, clientIp);
                 return AuthenticateResult.Fail(validationResult.FailureReason ?? "Invalid API Key");
             }
@@ -46,7 +46,6 @@ public class ApiKeyAuthenticationHandler(
             {
                 try
                 {
-                    await validationService.UpdateLastUsedAsync(validationResult.Identifier!, CancellationToken.None);
                     await validationService.IsRateLimitExceededAsync(validationResult.Identifier!, CancellationToken.None);
                 }
                 catch (Exception ex)
@@ -60,7 +59,7 @@ public class ApiKeyAuthenticationHandler(
             var principal = new ClaimsPrincipal(identity);
             var ticket = new AuthenticationTicket(principal, Scheme.Name);
 
-            Logger.LogInformation("API Key authenticated for user: {UserIdentifier} from IP: {ClientIp}", 
+            Logger.LogInformation("API Key authenticated for user: {UserIdentifier} from IP: {ClientIp}",
                 validationResult.Identifier, clientIp);
 
             return AuthenticateResult.Success(ticket);
@@ -76,7 +75,7 @@ public class ApiKeyAuthenticationHandler(
     {
         Response.StatusCode = 401;
         Response.Headers.Append("WWW-Authenticate", "ApiKey");
-        
+
         await Response.WriteAsync("API Key authentication required");
     }
 
