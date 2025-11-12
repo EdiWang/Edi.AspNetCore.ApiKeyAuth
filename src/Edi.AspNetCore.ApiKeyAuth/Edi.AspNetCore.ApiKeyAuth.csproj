@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+		<TargetFrameworks>net8.0;net10.0</TargetFrameworks>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Authors>Edi Wang</Authors>
@@ -8,7 +8,7 @@
 		<PackageTags>APIKey</PackageTags>
 		<PackageProjectUrl>https://edi.wang</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/EdiWang/Edi.AspNetCore.ApiKeyAuth</RepositoryUrl>
-		<Version>2.0.0</Version>
+		<Version>2.1.0</Version>
 		<Description>A simple API Key authentication library for ASP.NET Core</Description>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageIcon>edi-logo-blue.png</PackageIcon>
