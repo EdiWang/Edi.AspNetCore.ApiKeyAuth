@@ -7,8 +7,6 @@ A simple and flexible API Key authentication library for ASP.NET Core applicatio
 - 🔑 API Key authentication via headers or query parameters
 - 🏗️ Easy integration with ASP.NET Core's authentication system
 - ⚙️ Configurable API keys through `appsettings.json`
-- 📊 Built-in logging support
-- 🎯 Multiple .NET versions support (.NET 8.0 and .NET 9.0)
 
 ```mermaid
 sequenceDiagram
