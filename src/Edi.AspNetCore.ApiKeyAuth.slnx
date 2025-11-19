@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Edi.AspNetCore.ApiKeyAuth.Tests/Edi.AspNetCore.ApiKeyAuth.Tests.csproj" />
+  <Project Path="Edi.AspNetCore.ApiKeyAuth/Edi.AspNetCore.ApiKeyAuth.csproj" />
+</Solution>
