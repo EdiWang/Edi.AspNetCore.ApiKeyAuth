@@ -12,10 +12,10 @@ public static class KeyGenerator
         return new KeyPair(api, hashedApiKey);
     }
 
-    public static string GenerateApiKey()
+    public static string GenerateApiKey(int lengthInBytes = 32)
     {
-        var guid = Guid.NewGuid().ToString("N");
-        return guid;
+        var bytes = RandomNumberGenerator.GetBytes(lengthInBytes);
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     public static string HashApiKey(string apiKey)

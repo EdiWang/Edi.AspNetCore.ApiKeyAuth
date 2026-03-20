@@ -41,20 +41,7 @@ public class ApiKeyAuthenticationHandler(
                 return AuthenticateResult.Fail(validationResult.FailureReason ?? "Invalid API Key");
             }
 
-            // Update last used timestamp
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await validationService.IsRateLimitExceededAsync(validationResult.Identifier!, CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError(ex, "Failed to update API key usage for {Identifier}", validationResult.Identifier);
-                }
-            }, CancellationToken.None);
-
-            var claims = CreateClaims(validationResult, apiKey);
+            var claims = CreateClaims(validationResult);
             var identity = new ClaimsIdentity(claims, Scheme.Name);
             var principal = new ClaimsPrincipal(identity);
             var ticket = new AuthenticationTicket(principal, Scheme.Name);
@@ -119,28 +106,17 @@ public class ApiKeyAuthenticationHandler(
 
     private string GetClientIpAddress()
     {
-        // Check for forwarded headers first (for load balancers/proxies)
-        if (Request.Headers.TryGetValue("X-Forwarded-For", out var forwardedFor))
-        {
-            var firstIp = forwardedFor.FirstOrDefault()?.Split(',').FirstOrDefault()?.Trim();
-            if (!string.IsNullOrEmpty(firstIp))
-                return firstIp;
-        }
-
-        if (Request.Headers.TryGetValue("X-Real-IP", out var realIp))
-        {
-            return realIp.FirstOrDefault();
-        }
-
+        // Use Connection.RemoteIpAddress which is already resolved by the ForwardedHeaders middleware
+        // when the application is behind a reverse proxy.
+        // Do NOT manually parse X-Forwarded-For / X-Real-IP here as those headers can be spoofed.
         return Request.HttpContext.Connection.RemoteIpAddress?.ToString();
     }
 
-    private static List<Claim> CreateClaims(ApiKeyValidationResult validationResult, string apiKey)
+    private static List<Claim> CreateClaims(ApiKeyValidationResult validationResult)
     {
         var claims = new List<Claim>
         {
             new(ClaimTypes.Name, validationResult.Identifier!),
-            new("ApiKey", apiKey),
             new("UserIdentifier", validationResult.Identifier!),
             new(ClaimTypes.AuthenticationMethod, "ApiKey")
         };

@@ -4,6 +4,8 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Edi.AspNetCore.ApiKeyAuth.Services;
 
@@ -37,7 +39,7 @@ public class ApiKeyValidationService : IApiKeyValidationService
         }
 
         // Use caching to improve performance
-        var cacheKey = $"apikey_validation_{_hasher.HashApiKey(apiKey)}";
+        var cacheKey = $"apikey_validation_{ComputeDeterministicHash(apiKey)}";
         if (_cache.TryGetValue(cacheKey, out ApiKeyConfig cachedConfig) && cachedConfig != null)
         {
             return await ValidateApiKeyConfigAsync(cachedConfig, apiKey, ipAddress, cancellationToken);
@@ -56,7 +58,11 @@ public class ApiKeyValidationService : IApiKeyValidationService
             }
             else if (!string.IsNullOrEmpty(config.Key))
             {
-                isMatch = config.Key == apiKey;
+                // Use constant-time comparison to prevent timing attacks
+                var configKeyBytes = Encoding.UTF8.GetBytes(config.Key);
+                var apiKeyBytes = Encoding.UTF8.GetBytes(apiKey);
+                isMatch = configKeyBytes.Length == apiKeyBytes.Length
+                          && CryptographicOperations.FixedTimeEquals(configKeyBytes, apiKeyBytes);
             }
 
             if (isMatch)
@@ -161,5 +167,15 @@ public class ApiKeyValidationService : IApiKeyValidationService
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Compute a deterministic hash for use as a cache key.
+    /// Unlike PBKDF2 (which uses random salt), SHA256 always produces the same output for the same input.
+    /// </summary>
+    private static string ComputeDeterministicHash(string input)
+    {
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(hashBytes);
     }
 }

@@ -102,7 +102,7 @@ public class ApiKeyAuthenticationHandlerTests
         
         var claims = result.Principal.Claims.ToList();
         Assert.Contains(claims, c => c.Type == ClaimTypes.Name && c.Value == "test-user");
-        Assert.Contains(claims, c => c.Type == "ApiKey" && c.Value == apiKey);
+        Assert.DoesNotContain(claims, c => c.Type == "ApiKey");
         Assert.Contains(claims, c => c.Type == ClaimTypes.Role && c.Value == "Admin");
         Assert.Contains(claims, c => c.Type == ClaimTypes.Role && c.Value == "User");
         Assert.Contains(claims, c => c.Type == "scope" && c.Value == "read");
@@ -307,16 +307,15 @@ public class ApiKeyAuthenticationHandlerTests
     }
 
     [Fact]
-    public async Task HandleAuthenticateAsync_XForwardedForHeader_UsesForwardedIp()
+    public async Task HandleAuthenticateAsync_XForwardedForHeader_IgnoresForwardedIpAndUsesRemoteIp()
     {
         // Arrange
         var apiKey = "test-api-key";
-        var forwardedIp = "203.0.113.42";
         var handler = CreateHandler();
         var context = CreateHttpContext();
         context.Request.Headers["X-API-Key"] = apiKey;
-        context.Request.Headers["X-Forwarded-For"] = $"{forwardedIp}, 192.168.1.1";
-        
+        context.Request.Headers["X-Forwarded-For"] = "203.0.113.42, 192.168.1.1";
+
         var validationResult = new ApiKeyValidationResult
         {
             IsValid = true,
@@ -325,7 +324,8 @@ public class ApiKeyAuthenticationHandlerTests
             Scopes = Array.Empty<string>()
         };
 
-        _validationService.Setup(x => x.ValidateApiKeyAsync(apiKey, forwardedIp, It.IsAny<CancellationToken>()))
+        // The handler should use RemoteIpAddress (127.0.0.1), not the forwarded IP
+        _validationService.Setup(x => x.ValidateApiKeyAsync(apiKey, "127.0.0.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(validationResult);
 
         await handler.InitializeAsync(_scheme, context);
@@ -335,20 +335,19 @@ public class ApiKeyAuthenticationHandlerTests
 
         // Assert
         Assert.True(result.Succeeded);
-        _validationService.Verify(x => x.ValidateApiKeyAsync(apiKey, forwardedIp, It.IsAny<CancellationToken>()), Times.Once);
+        _validationService.Verify(x => x.ValidateApiKeyAsync(apiKey, "127.0.0.1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task HandleAuthenticateAsync_XRealIpHeader_UsesRealIp()
+    public async Task HandleAuthenticateAsync_XRealIpHeader_IgnoresRealIpAndUsesRemoteIp()
     {
         // Arrange
         var apiKey = "test-api-key";
-        var realIp = "198.51.100.25";
         var handler = CreateHandler();
         var context = CreateHttpContext();
         context.Request.Headers["X-API-Key"] = apiKey;
-        context.Request.Headers["X-Real-IP"] = realIp;
-        
+        context.Request.Headers["X-Real-IP"] = "198.51.100.25";
+
         var validationResult = new ApiKeyValidationResult
         {
             IsValid = true,
@@ -357,7 +356,8 @@ public class ApiKeyAuthenticationHandlerTests
             Scopes = Array.Empty<string>()
         };
 
-        _validationService.Setup(x => x.ValidateApiKeyAsync(apiKey, realIp, It.IsAny<CancellationToken>()))
+        // The handler should use RemoteIpAddress (127.0.0.1), not the X-Real-IP header
+        _validationService.Setup(x => x.ValidateApiKeyAsync(apiKey, "127.0.0.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(validationResult);
 
         await handler.InitializeAsync(_scheme, context);
@@ -367,7 +367,7 @@ public class ApiKeyAuthenticationHandlerTests
 
         // Assert
         Assert.True(result.Succeeded);
-        _validationService.Verify(x => x.ValidateApiKeyAsync(apiKey, realIp, It.IsAny<CancellationToken>()), Times.Once);
+        _validationService.Verify(x => x.ValidateApiKeyAsync(apiKey, "127.0.0.1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -459,73 +459,6 @@ public class ApiKeyAuthenticationHandlerTests
         using var reader = new StreamReader(context.Response.Body);
         var responseBody = await reader.ReadToEndAsync();
         Assert.Equal("Access forbidden", responseBody);
-    }
-
-    [Fact]
-    public async Task HandleAuthenticateAsync_UpdatesRateLimitInBackground()
-    {
-        // Arrange
-        var apiKey = "test-api-key";
-        var handler = CreateHandler();
-        var context = CreateHttpContext();
-        context.Request.Headers["X-API-Key"] = apiKey;
-        
-        var validationResult = new ApiKeyValidationResult
-        {
-            IsValid = true,
-            Identifier = "test-user",
-            Roles = Array.Empty<string>(),
-            Scopes = Array.Empty<string>()
-        };
-
-        _validationService.Setup(x => x.ValidateApiKeyAsync(apiKey, "127.0.0.1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(validationResult);
-
-        await handler.InitializeAsync(_scheme, context);
-
-        // Act
-        var result = await handler.AuthenticateAsync();
-
-        // Assert
-        Assert.True(result.Succeeded);
-        
-        // Wait a bit for the background task
-        await Task.Delay(100);
-        
-        _validationService.Verify(x => x.IsRateLimitExceededAsync("test-user", It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task HandleAuthenticateAsync_RateLimitUpdateFailure_DoesNotAffectAuthentication()
-    {
-        // Arrange
-        var apiKey = "test-api-key";
-        var handler = CreateHandler();
-        var context = CreateHttpContext();
-        context.Request.Headers["X-API-Key"] = apiKey;
-        
-        var validationResult = new ApiKeyValidationResult
-        {
-            IsValid = true,
-            Identifier = "test-user",
-            Roles = Array.Empty<string>(),
-            Scopes = Array.Empty<string>()
-        };
-
-        _validationService.Setup(x => x.ValidateApiKeyAsync(apiKey, "127.0.0.1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(validationResult);
-        
-        _validationService.Setup(x => x.IsRateLimitExceededAsync("test-user", It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new Exception("Rate limit service unavailable"));
-
-        await handler.InitializeAsync(_scheme, context);
-
-        // Act
-        var result = await handler.AuthenticateAsync();
-
-        // Assert
-        Assert.True(result.Succeeded); // Authentication should still succeed
-        Assert.Equal("test-user", result.Principal!.Identity!.Name);
     }
 
     [Theory]
