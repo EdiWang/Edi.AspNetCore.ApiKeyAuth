@@ -102,7 +102,8 @@ public class ApiKeyAuthenticationHandlerTests
         
         var claims = result.Principal.Claims.ToList();
         Assert.Contains(claims, c => c.Type == ClaimTypes.Name && c.Value == "test-user");
-        Assert.DoesNotContain(claims, c => c.Type == "ApiKey");
+        Assert.Contains(claims, c => c.Type == "UserIdentifier" && c.Value == "test-user");
+        Assert.Contains(claims, c => c.Type == ClaimTypes.AuthenticationMethod && c.Value == "ApiKey");
         Assert.Contains(claims, c => c.Type == ClaimTypes.Role && c.Value == "Admin");
         Assert.Contains(claims, c => c.Type == ClaimTypes.Role && c.Value == "User");
         Assert.Contains(claims, c => c.Type == "scope" && c.Value == "read");
@@ -515,5 +516,116 @@ public class ApiKeyAuthenticationHandlerTests
         Assert.True(result.Succeeded);
         _validationService.Verify(x => x.ValidateApiKeyAsync(bearerApiKey, "127.0.0.1", It.IsAny<CancellationToken>()), Times.Once);
         _validationService.Verify(x => x.ValidateApiKeyAsync(headerApiKey, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAuthenticateAsync_ApiKeyInCustomHeader_ReturnsSuccess()
+    {
+        // Arrange
+        var apiKey = "custom-header-key";
+        _options.CustomHeaderNames = ["X-Custom-Key"];
+
+        var handler = CreateHandler();
+        var context = CreateHttpContext();
+        context.Request.Headers["X-Custom-Key"] = apiKey;
+
+        var validationResult = new ApiKeyValidationResult
+        {
+            IsValid = true,
+            Identifier = "custom-user",
+            Roles = Array.Empty<string>(),
+            Scopes = Array.Empty<string>()
+        };
+
+        _validationService.Setup(x => x.ValidateApiKeyAsync(apiKey, "127.0.0.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(validationResult);
+
+        await handler.InitializeAsync(_scheme, context);
+
+        // Act
+        var result = await handler.AuthenticateAsync();
+
+        // Assert
+        Assert.True(result.Succeeded);
+        Assert.Equal("custom-user", result.Principal!.Identity!.Name);
+    }
+
+    [Fact]
+    public async Task HandleAuthenticateAsync_NullRemoteIpAddress_PassesNullToValidationService()
+    {
+        // Arrange
+        var apiKey = "test-api-key";
+        var handler = CreateHandler();
+        var context = CreateHttpContext();
+        context.Request.Headers["X-API-Key"] = apiKey;
+        context.Connection.RemoteIpAddress = null;
+
+        var validationResult = new ApiKeyValidationResult
+        {
+            IsValid = true,
+            Identifier = "test-user",
+            Roles = Array.Empty<string>(),
+            Scopes = Array.Empty<string>()
+        };
+
+        _validationService.Setup(x => x.ValidateApiKeyAsync(apiKey, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(validationResult);
+
+        await handler.InitializeAsync(_scheme, context);
+
+        // Act
+        var result = await handler.AuthenticateAsync();
+
+        // Assert
+        Assert.True(result.Succeeded);
+        _validationService.Verify(x => x.ValidateApiKeyAsync(apiKey, null, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAuthenticateAsync_EnableDetailedLogging_Success_DoesNotThrow()
+    {
+        // Arrange
+        _options.EnableDetailedLogging = true;
+        var apiKey = "test-api-key";
+        var handler = CreateHandler();
+        var context = CreateHttpContext();
+        context.Request.Headers["X-API-Key"] = apiKey;
+
+        var validationResult = new ApiKeyValidationResult
+        {
+            IsValid = true,
+            Identifier = "test-user",
+            Roles = Array.Empty<string>(),
+            Scopes = Array.Empty<string>()
+        };
+
+        _validationService.Setup(x => x.ValidateApiKeyAsync(apiKey, "127.0.0.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(validationResult);
+
+        await handler.InitializeAsync(_scheme, context);
+
+        // Act
+        var result = await handler.AuthenticateAsync();
+
+        // Assert
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task HandleAuthenticateAsync_EnableDetailedLogging_NoKey_DoesNotThrow()
+    {
+        // Arrange
+        _options.EnableDetailedLogging = true;
+        var handler = CreateHandler();
+        var context = CreateHttpContext();
+
+        await handler.InitializeAsync(_scheme, context);
+
+        // Act
+        var result = await handler.AuthenticateAsync();
+
+        // Assert
+        Assert.False(result.Succeeded);
+        Assert.Equal("API Key not found", result.Failure?.Message);
     }
 }
