@@ -6,7 +6,7 @@ public class ApiKeyAuthenticationSchemeOptions : AuthenticationSchemeOptions
 {
     public const string DefaultScheme = "ApiKey";
     public string Scheme => DefaultScheme;
-    public string AuthenticationType = DefaultScheme;
+    public string AuthenticationType { get; set; } = DefaultScheme;
 
     /// <summary>
     /// Allow API key authentication via query string parameters (less secure)

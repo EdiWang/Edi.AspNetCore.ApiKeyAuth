@@ -3,6 +3,7 @@ using Edi.AspNetCore.ApiKeyAuth.Security;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -11,24 +12,27 @@ namespace Edi.AspNetCore.ApiKeyAuth.Services;
 
 public class ApiKeyValidationService : IApiKeyValidationService
 {
-    private readonly IConfiguration _configuration;
     private readonly ILogger<ApiKeyValidationService> _logger;
     private readonly IMemoryCache _cache;
     private readonly IApiKeyHasher _hasher;
     private readonly IRateLimitService _rateLimitService;
+    private readonly IOptionsMonitor<ApiKeyAuthenticationSchemeOptions> _schemeOptions;
+    private readonly List<ApiKeyConfig> _apiKeys;
 
     public ApiKeyValidationService(
         IConfiguration configuration,
         ILogger<ApiKeyValidationService> logger,
         IMemoryCache cache,
         IApiKeyHasher hasher,
-        IRateLimitService rateLimitService)
+        IRateLimitService rateLimitService,
+        IOptionsMonitor<ApiKeyAuthenticationSchemeOptions> schemeOptions)
     {
-        _configuration = configuration;
         _logger = logger;
         _cache = cache;
         _hasher = hasher;
         _rateLimitService = rateLimitService;
+        _schemeOptions = schemeOptions;
+        _apiKeys = configuration.GetSection("ApiKeys").Get<List<ApiKeyConfig>>() ?? [];
     }
 
     public async Task<ApiKeyValidationResult> ValidateApiKeyAsync(string apiKey, string ipAddress = null, CancellationToken cancellationToken = default)
@@ -38,16 +42,19 @@ public class ApiKeyValidationService : IApiKeyValidationService
             return new ApiKeyValidationResult { IsValid = false, FailureReason = "API key is required" };
         }
 
-        // Use caching to improve performance
-        var cacheKey = $"apikey_validation_{ComputeDeterministicHash(apiKey)}";
-        if (_cache.TryGetValue(cacheKey, out ApiKeyConfig cachedConfig) && cachedConfig != null)
+        var options = _schemeOptions.Get(ApiKeyAuthenticationSchemeOptions.DefaultScheme);
+        string cacheKey = null;
+
+        if (options.EnableCaching)
         {
-            return await ValidateApiKeyConfigAsync(cachedConfig, apiKey, ipAddress, cancellationToken);
+            cacheKey = $"apikey_validation_{ComputeDeterministicHash(apiKey)}";
+            if (_cache.TryGetValue(cacheKey, out ApiKeyConfig cachedConfig) && cachedConfig != null)
+            {
+                return await ValidateApiKeyConfigAsync(cachedConfig, ipAddress, cancellationToken);
+            }
         }
 
-        var apiKeys = _configuration.GetSection("ApiKeys").Get<List<ApiKeyConfig>>() ?? [];
-
-        foreach (var config in apiKeys)
+        foreach (var config in _apiKeys)
         {
             bool isMatch = false;
 
@@ -67,8 +74,11 @@ public class ApiKeyValidationService : IApiKeyValidationService
 
             if (isMatch)
             {
-                _cache.Set(cacheKey, config, TimeSpan.FromMinutes(5));
-                return await ValidateApiKeyConfigAsync(config, apiKey, ipAddress, cancellationToken);
+                if (options.EnableCaching)
+                {
+                    _cache.Set(cacheKey, config, options.CacheDuration);
+                }
+                return await ValidateApiKeyConfigAsync(config, ipAddress, cancellationToken);
             }
         }
 
@@ -76,7 +86,7 @@ public class ApiKeyValidationService : IApiKeyValidationService
         return new ApiKeyValidationResult { IsValid = false, FailureReason = "Invalid API key" };
     }
 
-    private async Task<ApiKeyValidationResult> ValidateApiKeyConfigAsync(ApiKeyConfig config, string apiKey, string ipAddress, CancellationToken cancellationToken)
+    private async Task<ApiKeyValidationResult> ValidateApiKeyConfigAsync(ApiKeyConfig config, string ipAddress, CancellationToken cancellationToken)
     {
         // Check if API key is active
         if (!config.IsActive)
@@ -100,8 +110,8 @@ public class ApiKeyValidationService : IApiKeyValidationService
             }
         }
 
-        // Check rate limits
-        if (await IsRateLimitExceededAsync(config.Identifier, cancellationToken))
+        // Check rate limits using per-key configuration
+        if (await _rateLimitService.IsRateLimitExceededAsync(config.Identifier, config.RateLimit, cancellationToken))
         {
             return new ApiKeyValidationResult { IsValid = false, FailureReason = "Rate limit exceeded" };
         }

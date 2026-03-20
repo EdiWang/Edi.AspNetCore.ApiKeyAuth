@@ -27,7 +27,10 @@ public class ApiKeyAuthenticationHandler(
 
             if (string.IsNullOrWhiteSpace(apiKey))
             {
-                Logger.LogDebug("API Key not found in request");
+                if (Options.EnableDetailedLogging)
+                {
+                    Logger.LogDebug("API Key not found in request");
+                }
                 return AuthenticateResult.Fail("API Key not found");
             }
 
@@ -46,8 +49,11 @@ public class ApiKeyAuthenticationHandler(
             var principal = new ClaimsPrincipal(identity);
             var ticket = new AuthenticationTicket(principal, Scheme.Name);
 
-            Logger.LogInformation("API Key authenticated for user: {UserIdentifier} from IP: {ClientIp}",
-                validationResult.Identifier, clientIp);
+            if (Options.EnableDetailedLogging)
+            {
+                Logger.LogInformation("API Key authenticated for user: {UserIdentifier} from IP: {ClientIp}",
+                    validationResult.Identifier, clientIp);
+            }
 
             return AuthenticateResult.Success(ticket);
         }
@@ -93,6 +99,15 @@ public class ApiKeyAuthenticationHandler(
         if (Request.Headers.TryGetValue("ApiKey", out var altHeaderApiKey))
         {
             return altHeaderApiKey.FirstOrDefault();
+        }
+
+        // Check user-configured custom headers
+        foreach (var headerName in Options.CustomHeaderNames)
+        {
+            if (Request.Headers.TryGetValue(headerName, out var customHeaderApiKey))
+            {
+                return customHeaderApiKey.FirstOrDefault();
+            }
         }
 
         // Check query string (least secure, should be configurable)
